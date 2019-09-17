@@ -3,3 +3,5 @@
 log/*
 !log/.gitkeep
 *.pyc
+urls/*
+!urls/.gitkeep

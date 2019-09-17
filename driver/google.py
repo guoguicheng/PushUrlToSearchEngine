@@ -1,7 +1,7 @@
 # coding:utf-8
 from common.functions import log_success, log_fail_items
 import requests
-import datetime
+import time
 import os
 import sys
 sys.path.append('../')

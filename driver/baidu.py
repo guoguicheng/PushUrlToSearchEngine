@@ -1,7 +1,8 @@
 # coding:utf-8
 from common.functions import log_success, log_fail_items
+from urllib.parse import urlparse
 import requests
-import datetime
+import time
 import os
 import sys
 sys.path.append('../')
@@ -12,8 +13,10 @@ class push:
         self.faild_keys = ['not_valid', 'not_same_site']
 
     def start(self, site, token, urls_file):
+        (scheme, netloc, path, params, query, fragment) = urlparse(site)
+
         url = "http://data.zz.baidu.com/urls?site=%s&token=%s" % (site, token)
-        date = datetime.date.today()
+        date = time.strftime('%Y-%m-%d-%H',time.localtime(time.time()))
 
         with open(urls_file, 'r') as f:
             data = '\n'.join([l.strip() for l in f.readlines() if l.strip()])
@@ -27,8 +30,8 @@ class push:
 
         response = requests.post(url, data=data, headers=headers).json()
 
-        log_success(date, response['remain'], response['success'])
-        [log_fail_items(date, k, response[k])
+        log_success(netloc, date, response['remain'], response['success'])
+        [log_fail_items(netloc, date, k, response[k])
          for k in self.faild_keys if k in response]
 
     def __del__(self):
