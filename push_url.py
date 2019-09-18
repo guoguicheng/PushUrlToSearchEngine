@@ -18,7 +18,7 @@ def baidu():
     for k in baidu_site_config:
         site = baidu_site_config[k]['site']
         token = baidu_site_config[k]['token']
-        urls_file = os.path.join(cwd, 'urls', baidu_site_config[k]['urls'])
+        urls_file = os.path.join(cwd, 'urls', k+".txt")
         push.start(site, token, urls_file)
 
 
