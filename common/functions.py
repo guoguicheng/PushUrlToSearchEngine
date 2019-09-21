@@ -14,9 +14,9 @@ def log_success(domain, date, data):
         f.writelines([item+'\n' for item in data])
 
 
-def update_status(mydb, status, url_id):
+def update_status(mydb, status, url_id, info=''):
     """更新url提交结果"""
     current_time = int(time.time())
-    update_sql = """UPDATE urls SET status=%s,updated_time=%s WHERE id = %s"""
-    param = (status, current_time, url_id)
+    update_sql = """UPDATE urls SET status=%s,updated_time=%s,info=%s WHERE id = %s"""
+    param = (status, current_time, info, url_id)
     mydb.execute(update_sql, param)

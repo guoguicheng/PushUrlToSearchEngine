@@ -136,19 +136,22 @@ class push:
                 if response_data['status'] is 0:
                     print('提交成功')  # {"over":0,"status":0}
                     update_status(self.mydb, 1, url_id)
+                elif response_data['status'] is 4:
+                    # {"status":4}
+                    msg = 'ip或cookie已到提交的限制'
+                    print(msg, response_data)
+                    update_status(self.mydb, 0, url_id, msg)
                 else:
-                    print('返回状态成功,提交失败:', response_data,proxies)
-                    update_status(self.mydb, 0, url_id)
-            elif response.status_code == 403:
-                update_status(self.mydb, 0, url_id)
-                self.base_sleep_time = random.randint(10, 30)
-                print('request 403')
+                    msg = '返回状态成功,提交失败:'
+                    print(msg, response_data, proxies)
+                    update_status(self.mydb, 0, url_id, msg)
             else:
-                # {"status":4}
-                print('ip或cookie已到提交的限制', response)
-                update_status(self.mydb, 0, url_id)
+                update_status(self.mydb, 0, url_id, response.status_code)
+                self.base_sleep_time = random.randint(10, 30)
+                print('HTTP CODE：', response.status_code)
+
         except Exception as e:
-            update_status(self.mydb, 0, url_id)
+            update_status(self.mydb, 0, url_id, '异常')
             print(e)
 
     def __del__(self):
