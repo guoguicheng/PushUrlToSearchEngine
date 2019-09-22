@@ -20,7 +20,7 @@ class push:
 
     def __init__(self):
         self.submit_url = "https://ziyuan.baidu.com/linksubmit/urlsubmit"
-        self.base_sleep_time = 1
+        self.base_sleep_time = 0
         self.success_urls = []
         self.fail_urls = []
         self.time_sleep = 1
@@ -173,7 +173,7 @@ class push:
             self.base_sleep_time = random.randint(1, 10)
             print(msg, e)
 
-        #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+15))
+        time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+15))
 
     def __del__(self):
         pass
