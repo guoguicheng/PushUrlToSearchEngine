@@ -32,8 +32,12 @@ class push:
 
     def urls_to_db(self, urls_file):
         """ url文件写入数据库 """
+        urls = []
+
         with open(urls_file, 'r') as f:
             urls = f.readlines()
+        total = len(urls)
+        finished = 0
 
         insert_sql = """INSERT INTO urls(url,created_time) VALUES(%s,%s)"""
         for url in urls:
@@ -42,25 +46,30 @@ class push:
             current_time = int(time.time())
             param = (url.split(), current_time)
             self.mydb.execute(insert_sql, param)
+            finished += 1
+            print("\r\033[95m[SAVING]\033[0m \033[94mtotal\033[0m:%d,\033[94mfinished\033[0m:%d" % (
+                total, finished), end="")
+        print("\n\033[94mDONE\033[0m")
 
     # 获取代理ip{因为本地ip在换了多个cookie以后，百度那边做了记录，不换ip提交就是失败}
     # ip有时效性为5分钟
     #  建议在获取ip成功后拿去验证下是不是之前用过的ip，是否可以用再去请求提交
+
     def get_proxies(self):
         """获取代理地址"""
-        ips = dict()
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
         api = 'http://api.wandoudl.com/api/ip?app_key=95ceb15ce05f89b0aef10a6c906ff91a&pack=205700&num=1&xy=2&type=2&lb=\r\n&mr=1&'
-        response = requests.get(url=api, headers=headers)
-        json_data = json.loads(response.content.decode('utf-8'))
-        ip = json_data["data"][0]["ip"]
-        port = json_data["data"][0]["port"]
-        ips['ip'] = ip
-        ips['port'] = port
+        response = requests.get(url=api, headers=headers).json()
+        ip = response["data"][0]["ip"]
+        port = response["data"][0]["port"]
 
-        return ips
+        proxies = {
+            'http': '%s:%d' % (ip, port),
+            'https': '%s:%d' % (ip, port)
+        }
+        return proxies
 
     # 获取cookies值，一个cookie 是只能提交10个url，你看下那种效果高是选择本地还是网络请求
     def get_cookies(self):
@@ -120,17 +129,24 @@ class push:
 
     def post_url(self, url, url_id):
         """发起提交请求"""
-        # time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+15)
+
         data = {'url': url}
         headers = {
+            'Connection': 'close',
             'User-Agent': random.choice(self.user_agents)
         }
         headers['Content-Length'] = str(sys.getsizeof(data))
         headers['Cookie'] = random.choice(self.cookies)
+        #headers['Cookie']="BAIDUID=B30BE6FEA0C79D62B7EC016B4D880E8E:FG=1; BIDUPSID=B30BE6FEA0C79D62B7EC016B4D880E8E; PSTM=1564829515; BDUSS=DkxTTZNUmdmNXpEUmt5c0JhQ1ZHLVk3TjFnQldJYjIxaHlaYk5HU3VMVEM5V3hkRVFBQUFBJCQAAAAAAAAAAAEAAADEqM4f0KG5-TIwMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMJoRV3CaEVdN; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598; H_PS_PSSID=1458_21082_29523_29721_29568_29220_22158; delPer=0; PSINO=7; SITEMAPSESSID=gn1hm5pe9oj9bu1s90jfjptns2; lastIdentity=PassUserIdentity; Hm_lvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066651; Hm_lpvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066932"
+
         proxies = self.get_proxies()
+        requests.adapters.DEFAULT_RETRIES = 5
+        req = requests.session()
+        req.keep_alive = False  # 关闭多余连接
+
         try:
-            response = requests.post(
-                url=self.submit_url, data=data, headers=headers, proxies=proxies)
+            response = req.post(
+                url=self.submit_url, data=data, headers=headers, proxies=proxies, verify=False)
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data['status'] is 0:
@@ -147,12 +163,17 @@ class push:
                     update_status(self.mydb, 0, url_id, msg)
             else:
                 update_status(self.mydb, 0, url_id, response.status_code)
-                self.base_sleep_time = random.randint(10, 30)
+                self.base_sleep_time = random.randint(1, 10)
                 print('HTTP CODE：', response.status_code)
+            req.close()
 
         except Exception as e:
-            update_status(self.mydb, 0, url_id, '异常')
-            print(e)
+            msg = '异常'
+            update_status(self.mydb, 0, url_id, msg)
+            self.base_sleep_time = random.randint(1, 10)
+            print(msg, e)
+
+        #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+15))
 
     def __del__(self):
         pass
