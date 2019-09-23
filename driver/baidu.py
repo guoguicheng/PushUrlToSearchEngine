@@ -29,6 +29,22 @@ class push:
         self.cookies = self.get_cookies()
         self.mydb = Mysql()
         self.mydb.open()
+        self.push_header = {
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept-Language": "zh-CN,zh;q=0.9",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "Host": "ziyuan.baidu.com",
+            "Origin": "https://ziyuan.baidu.com",
+            "Pragma": "no-cache",
+            "Referer": "https://ziyuan.baidu.com/linksubmit/url",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+            "X-Request-By": "baidu.ajax",
+            "X-Requested-With": "XMLHttpRequest",
+        }
 
     def urls_to_db(self, urls_file):
         """ url文件写入数据库 """
@@ -60,16 +76,16 @@ class push:
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
-        api = 'http://api.wandoudl.com/api/ip?app_key=95ceb15ce05f89b0aef10a6c906ff91a&pack=205700&num=1&xy=2&type=2&lb=\r\n&mr=1&'
+        #api = 'http://api.wandoudl.com/api/ip?app_key=95ceb15ce05f89b0aef10a6c906ff91a&pack=205700&num=1&xy=2&type=2&lb=\r\n&mr=1&'
+        api = "http://api.wandoudl.com/api/ip?app_key=cc62678d82db31f3d127da47fc089b70&pack=207323&num=20&xy=1&type=2&lb=\r\n&mr=1&"
         response = requests.get(url=api, headers=headers).json()
         ip = response["data"][0]["ip"]
         port = response["data"][0]["port"]
 
-        proxies = {
-            'http': '%s:%d' % (ip, port),
-            'https': '%s:%d' % (ip, port)
-        }
-        return proxies
+        ips = dict()
+        ips['ip'] = ip
+        ips['port'] = port
+        return ips
 
     # 获取cookies值，一个cookie 是只能提交10个url，你看下那种效果高是选择本地还是网络请求
     def get_cookies(self):
@@ -124,56 +140,51 @@ class push:
 
         for p in range(page):
             url_list = self.get_urls(p, offset)
+            idx = 0
             for row in url_list:
-                self.post_url(row[1], row[0])
+                msg = self.post_url(row[1], row[0])
+                idx += 1
+                print("\r\033[95m[PUSH]\033[0m finished[\033[94m%d%%\033[0m]  %s" % (
+                    int((p*offset+idx)/row[0]*100), msg), end="")
 
     def post_url(self, url, url_id):
         """发起提交请求"""
 
+        msg = ''
         data = {'url': url}
-        headers = {
-            'Connection': 'close',
-            'User-Agent': random.choice(self.user_agents)
-        }
-        headers['Content-Length'] = str(sys.getsizeof(data))
-        headers['Cookie'] = random.choice(self.cookies)
-        #headers['Cookie']="BAIDUID=B30BE6FEA0C79D62B7EC016B4D880E8E:FG=1; BIDUPSID=B30BE6FEA0C79D62B7EC016B4D880E8E; PSTM=1564829515; BDUSS=DkxTTZNUmdmNXpEUmt5c0JhQ1ZHLVk3TjFnQldJYjIxaHlaYk5HU3VMVEM5V3hkRVFBQUFBJCQAAAAAAAAAAAEAAADEqM4f0KG5-TIwMgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMJoRV3CaEVdN; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598; H_PS_PSSID=1458_21082_29523_29721_29568_29220_22158; delPer=0; PSINO=7; SITEMAPSESSID=gn1hm5pe9oj9bu1s90jfjptns2; lastIdentity=PassUserIdentity; Hm_lvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066651; Hm_lpvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066932"
+        self.push_header["Cookie"] = random.choice(self.cookies)
+        self.push_header["Content-Length"] = str(sys.getsizeof(data))
+        self.push_header["User-Agent"] = random.choice(self.user_agents)
+        #headers['Cookie']="BAIDUID=B30BE6FEA0C79D62B7EC016B4D880E8E:FG=1; BIDUPSID=B30BE6FEA0C79D62B7EC016B4D880E8E; PSTM=1564829515; uc_login_unique=6ce0a03b3a8f6030c714294b311d59c7; uc_recom_mark=cmVjb21tYXJrXzI3MTg3NDgz; delPer=0; H_PS_PSSID=1458_21082_29523_29721_29568_29220_22158; PSINO=7; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598; __cas__st__=NLI; __cas__id__=0; Hm_lvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066651,1569125907,1569127914,1569244953; BDUSS=FiYmFDZEVzNjQybDB1bTg3UjFneG1PSHBqOEE1NU1IaThwdTk1Rk1FOVNWTEJkRVFBQUFBJCQAAAAAAAAAAAEAAADvYfVLX01BTmVhcnRoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLHiF1Sx4hdY2; SITEMAPSESSID=mgpkhb9246hukg397jjbq0pi74; lastIdentity=PassUserIdentity; Hm_lpvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569245036"
 
         proxies = self.get_proxies()
-        requests.adapters.DEFAULT_RETRIES = 5
-        req = requests.session()
-        req.keep_alive = False  # 关闭多余连接
 
         try:
-            response = req.post(
-                url=self.submit_url, data=data, headers=headers, proxies=proxies, verify=False)
+            response = requests.post(
+                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies)
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data['status'] is 0:
-                    print('提交成功')  # {"over":0,"status":0}
+                    msg = "提交成功"+response.text  # {"over":0,"status":0}
                     update_status(self.mydb, 1, url_id)
-                elif response_data['status'] is 4:
-                    # {"status":4}
-                    msg = 'ip或cookie已到提交的限制'
-                    print(msg, response_data)
+                elif response_data['status'] is 4:  # {"status":4}
+                    msg = 'ip或cookie已到提交的限制'+response.text
                     update_status(self.mydb, 0, url_id, msg)
                 else:
-                    msg = '返回状态成功,提交失败:'
-                    print(msg, response_data, proxies)
+                    msg = '返回状态成功,提交失败 '+response.text
                     update_status(self.mydb, 0, url_id, msg)
             else:
+                msg = 'HTTP CODE：'+response.text
                 update_status(self.mydb, 0, url_id, response.status_code)
                 self.base_sleep_time = random.randint(1, 10)
-                print('HTTP CODE：', response.status_code)
-            req.close()
 
         except Exception as e:
-            msg = '异常'
+            msg = '异常:'+e
             update_status(self.mydb, 0, url_id, msg)
             self.base_sleep_time = random.randint(1, 10)
-            print(msg, e)
 
-        time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+15))
+        #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
+        return msg
 
     def __del__(self):
         pass
