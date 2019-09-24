@@ -35,7 +35,6 @@ class push:
             "Accept-Encoding": "gzip, deflate, br",
             "Accept-Language": "zh-CN,zh;q=0.9",
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
             "Host": "ziyuan.baidu.com",
             "Origin": "https://ziyuan.baidu.com",
@@ -45,6 +44,7 @@ class push:
             "Sec-Fetch-Site": "same-origin",
             "X-Request-By": "baidu.ajax",
             "X-Requested-With": "XMLHttpRequest",
+            "Connection": "close"
         }
 
     def urls_to_db(self, urls_file):
@@ -85,8 +85,8 @@ class push:
         response = requests.get(url=api, headers=headers).json()
         for item in response['data']:
             proxies = {
-                'http': 'http://%s:%d' % (item['ip'], item['port']),
-                'https': 'https://%s:%d' % (item['ip'], item['port'])
+                'http': 'socks5://%s:%d' % (item['ip'], item['port']),
+                'https': 'socks5://%s:%d' % (item['ip'], item['port'])
             }
             self.proxie_stack.append(proxies)
 
@@ -173,9 +173,11 @@ class push:
 
         proxies = self.get_proxies()
         #self.test_proxies(proxies)
+        requests.adapters.DEFAULT_RETRIES = 5
+
         try:
             response = requests.post(
-                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies, verify=False)
+                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies, verify=False, timeout=30)
 
             if response.status_code == 200:
                 response_data = response.json()
@@ -192,13 +194,14 @@ class push:
                 msg = 'HTTP CODE：'+response.text
                 update_status(self.mydb, 0, url_id, response.status_code)
                 self.base_sleep_time = random.randint(1, 10)
-
+            response.close()
         except Exception as e:
             msg = str(e)
             update_status(self.mydb, 0, url_id, msg)
             self.base_sleep_time = random.randint(1, 10)
 
         #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
+        time.sleep(5)
         return msg
 
     def __del__(self):
