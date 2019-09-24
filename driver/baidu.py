@@ -27,6 +27,7 @@ class push:
         self.faild_keys = ['not_valid', 'not_same_site']
         self.user_agents = baidu_config.user_agent_list
         self.cookies = self.get_cookies()
+        self.proxie_stack = []
         self.mydb = Mysql()
         self.mydb.open()
         self.push_header = {
@@ -63,9 +64,8 @@ class push:
             param = (url.split(), current_time)
             self.mydb.execute(insert_sql, param)
             finished += 1
-            print("\r\033[95m[SAVING]\033[0m \033[94mtotal\033[0m:%d,\033[94mfinished\033[0m:%d" % (
-                total, finished), end="")
-        print("\n\033[94mDONE\033[0m")
+            print("\r[SAVING]total:%d,finished:%d" % (total, finished), end="")
+        print("\nDONE!")
 
     # 获取代理ip{因为本地ip在换了多个cookie以后，百度那边做了记录，不换ip提交就是失败}
     # ip有时效性为5分钟
@@ -73,21 +73,25 @@ class push:
 
     def get_proxies(self):
         """获取代理地址"""
+
+        if len(self.proxie_stack) > 0:
+            return self.proxie_stack.pop()
+
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
         #api = 'http://api.wandoudl.com/api/ip?app_key=95ceb15ce05f89b0aef10a6c906ff91a&pack=205700&num=1&xy=2&type=2&lb=\r\n&mr=1&'
         api = "http://api.wandoudl.com/api/ip?app_key=cc62678d82db31f3d127da47fc089b70&pack=207323&num=20&xy=1&type=2&lb=\r\n&mr=1&"
         response = requests.get(url=api, headers=headers).json()
-        ip = response["data"][0]["ip"]
-        port = response["data"][0]["port"]
+        for item in response['data']:
+            proxies = {
+                'http': 'http://%s:%d' % (item['ip'], item['port']),
+                'https': 'https://%s:%d' % (item['ip'], item['port'])
+            }
+            self.proxie_stack.append(proxies)
 
-        ips = dict()
-        ips['ip'] = ip
-        ips['port'] = port
-        return ips
+        return self.proxie_stack.pop()
 
-    # 获取cookies值，一个cookie 是只能提交10个url，你看下那种效果高是选择本地还是网络请求
     def get_cookies(self):
         """获取cookies"""
         try:
@@ -140,12 +144,22 @@ class push:
 
         for p in range(page):
             url_list = self.get_urls(p, offset)
-            idx = 0
-            for row in url_list:
-                msg = self.post_url(row[1], row[0])
-                idx += 1
-                print("\r\033[95m[PUSH]\033[0m finished[\033[94m%d%%\033[0m]  %s" % (
-                    int((p*offset+idx)/row[0]*100), msg), end="")
+            cursor = p*offset
+            i = 0
+            for item in url_list:
+                msg = self.post_url(item[1], item[0])
+                i += 1
+                print("%s\n\r[PUSH]:%.2f%%" %
+                      (msg, round((cursor+i)/row[0]*100, 2)), end="")
+
+    def test_proxies(self, proxies):
+        header = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36',
+            'Connection': 'keep-alive'
+        }
+        p = requests.get('http://icanhazip.com',
+                         headers=header, proxies=proxies)
+        print(proxies, p.text)
 
     def post_url(self, url, url_id):
         """发起提交请求"""
@@ -158,10 +172,11 @@ class push:
         #headers['Cookie']="BAIDUID=B30BE6FEA0C79D62B7EC016B4D880E8E:FG=1; BIDUPSID=B30BE6FEA0C79D62B7EC016B4D880E8E; PSTM=1564829515; uc_login_unique=6ce0a03b3a8f6030c714294b311d59c7; uc_recom_mark=cmVjb21tYXJrXzI3MTg3NDgz; delPer=0; H_PS_PSSID=1458_21082_29523_29721_29568_29220_22158; PSINO=7; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598; __cas__st__=NLI; __cas__id__=0; Hm_lvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066651,1569125907,1569127914,1569244953; BDUSS=FiYmFDZEVzNjQybDB1bTg3UjFneG1PSHBqOEE1NU1IaThwdTk1Rk1FOVNWTEJkRVFBQUFBJCQAAAAAAAAAAAEAAADvYfVLX01BTmVhcnRoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLHiF1Sx4hdY2; SITEMAPSESSID=mgpkhb9246hukg397jjbq0pi74; lastIdentity=PassUserIdentity; Hm_lpvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569245036"
 
         proxies = self.get_proxies()
-
+        #self.test_proxies(proxies)
         try:
             response = requests.post(
-                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies)
+                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies, verify=False)
+
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data['status'] is 0:
@@ -179,7 +194,7 @@ class push:
                 self.base_sleep_time = random.randint(1, 10)
 
         except Exception as e:
-            msg = '异常:'+e
+            msg = str(e)
             update_status(self.mydb, 0, url_id, msg)
             self.base_sleep_time = random.randint(1, 10)
 
