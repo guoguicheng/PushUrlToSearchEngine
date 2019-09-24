@@ -85,8 +85,8 @@ class push:
         response = requests.get(url=api, headers=headers).json()
         for item in response['data']:
             proxies = {
-                'http': 'socks5://%s:%d' % (item['ip'], item['port']),
-                'https': 'socks5://%s:%d' % (item['ip'], item['port'])
+                'http': 'socks5h://%s:%d' % (item['ip'], item['port']),
+                'https': 'socks5h://%s:%d' % (item['ip'], item['port'])
             }
             self.proxie_stack.append(proxies)
 
@@ -197,7 +197,7 @@ class push:
             response.close()
         except Exception as e:
             msg = str(e)
-            update_status(self.mydb, 0, url_id, msg)
+            update_status(self.mydb, 0, url_id, '异常')
             self.base_sleep_time = random.randint(1, 10)
 
         #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
