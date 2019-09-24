@@ -3,6 +3,10 @@
 
     python3.6
 
+    apt-get install python3.6-dev libmysqlclient-dev
+
+    pip install -U requests[socks]
+
 ### 部署
 
     pip install -r requirements.txt
