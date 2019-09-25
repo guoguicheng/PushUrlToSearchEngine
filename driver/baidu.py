@@ -10,7 +10,15 @@ import sys
 import json
 import random
 import math
+import threadpool
+import threading
+import multiprocessing
 sys.path.append('../')
+
+requests.packages.urllib3.disable_warnings()
+requests.adapters.DEFAULT_RETRIES = 5
+
+finished = 0
 
 
 class push:
@@ -26,10 +34,8 @@ class push:
         self.time_sleep = 1
         self.faild_keys = ['not_valid', 'not_same_site']
         self.user_agents = baidu_config.user_agent_list
-        self.cookies = self.get_cookies()
         self.proxie_stack = []
-        self.mydb = Mysql()
-        self.mydb.open()
+        self.db_pool = {}
         self.push_header = {
             "Accept": "application/json, text/javascript, */*; q=0.01",
             "Accept-Encoding": "gzip, deflate, br",
@@ -46,6 +52,16 @@ class push:
             "X-Requested-With": "XMLHttpRequest",
             "Connection": "close"
         }
+        self.init()
+
+    def init(self):
+        print("开始加载cookie")
+        self.cookies = self.get_cookies()
+        print("开始连接数据库")
+        self.mydb = Mysql()
+        self.mydb.open()
+        print("开始初始化代理")
+        self.get_proxies()
 
     def urls_to_db(self, urls_file):
         """ url文件写入数据库 """
@@ -71,26 +87,23 @@ class push:
     # ip有时效性为5分钟
     #  建议在获取ip成功后拿去验证下是不是之前用过的ip，是否可以用再去请求提交
 
-    def get_proxies(self):
+    def get_proxies(self, init=True):
         """获取代理地址"""
 
-        if len(self.proxie_stack) > 0:
+        if not init and len(self.proxie_stack) > 0:
             return self.proxie_stack.pop()
 
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
-        #api = 'http://api.wandoudl.com/api/ip?app_key=95ceb15ce05f89b0aef10a6c906ff91a&pack=205700&num=1&xy=2&type=2&lb=\r\n&mr=1&'
-        api = "http://api.wandoudl.com/api/ip?app_key=cc62678d82db31f3d127da47fc089b70&pack=207323&num=20&xy=1&type=2&lb=\r\n&mr=1&"
+        api = "http://http.tiqu.alicdns.com/getip3?num=10&type=2&pro=620000&city=621000&yys=0&port=12&pack=65613&ts=0&ys=0&cs=0&lb=1&sb=0&pb=4&mr=1&regions="
         response = requests.get(url=api, headers=headers).json()
         for item in response['data']:
             proxies = {
-                'http': 'socks5h://%s:%d' % (item['ip'], item['port']),
-                'https': 'socks5h://%s:%d' % (item['ip'], item['port'])
+                'http': 'http://%s:%d' % (item['ip'], item['port']),
+                'https': 'https://%s:%d' % (item['ip'], item['port'])
             }
             self.proxie_stack.append(proxies)
-
-        return self.proxie_stack.pop()
 
     def get_cookies(self):
         """获取cookies"""
@@ -131,26 +144,61 @@ class push:
         """获取需要提交的url列表"""
         select_sql = """SELECT id,url FROM urls urls WHERE status=0 AND deleted_time IS NULL LIMIT %s,%s"""
         param = (page*offset, offset)
-        data = self.mydb.execute(select_sql, param, True)
+        thread_id = threading.currentThread().ident
+        data = self.db_pool[thread_id].execute(
+            select_sql, param, True)
 
         return data
 
     def urlsubmit(self):
         """使用代理方式提交url"""
-        total_sql = """SELECT count(*) FROM urls WHERE status=0 AND deleted_time IS NULL"""
+        print("开始提交url")
+        total_sql = """SELECT count(*) as num FROM urls WHERE status=0 AND deleted_time IS NULL"""
         (row,) = self.mydb.execute(total_sql, (), True)
+        total = row[0]
+        if total == 0:
+            return
         offset = 500
-        page = math.ceil(row[0]/offset)
+        page = math.ceil(total/offset)
 
-        for p in range(page):
+        thread_num = int(multiprocessing.cpu_count()/(1-0.2))
+        # 页数小于线程数
+        if page < thread_num:
+            offset = math.ceil(total/thread_num)
+            page = thread_num
+
+        # 总量小于线程数
+        if total < thread_num:
+            thread_num = total
+            page = total
+            offset = 1
+        pool = threadpool.ThreadPool(thread_num)
+
+        # 每个线程执行多少页
+        num = math.ceil(page/thread_num)
+        print("开始%d线程，共%d页，每线程处理%d页,每页%d条" % (thread_num, page, num, offset))
+        par_list = []
+        for i in range(thread_num):
+            par_list.append(([i*num, i*num+num, offset, total], None))
+        print(par_list)
+        request = threadpool.makeRequests(
+            self.start_process, par_list)
+        [pool.putRequest(req) for req in request]
+        pool.wait()
+
+    def start_process(self, start_page, end_page, offset, total):
+        """开始任务"""
+        global finished
+        thread_id = threading.currentThread().ident
+        self.db_pool[thread_id] = Mysql()
+        self.db_pool[thread_id].open()
+        for p in range(start_page, end_page):
             url_list = self.get_urls(p, offset)
-            cursor = p*offset
-            i = 0
             for item in url_list:
                 msg = self.post_url(item[1], item[0])
-                i += 1
-                print("%s\n\r[PUSH]:%.2f%%" %
-                      (msg, round((cursor+i)/row[0]*100, 2)), end="")
+                finished += 1
+                print("%s\n\r[PUSH]:%.2f%%\n" %
+                      (msg, round(finished/total*100, 2)), end="")
 
     def test_proxies(self, proxies):
         header = {
@@ -163,46 +211,46 @@ class push:
 
     def post_url(self, url, url_id):
         """发起提交请求"""
-
         msg = ''
         data = {'url': url}
+        thread_id = threading.currentThread().ident
         self.push_header["Cookie"] = random.choice(self.cookies)
         self.push_header["Content-Length"] = str(sys.getsizeof(data))
         self.push_header["User-Agent"] = random.choice(self.user_agents)
-        #headers['Cookie']="BAIDUID=B30BE6FEA0C79D62B7EC016B4D880E8E:FG=1; BIDUPSID=B30BE6FEA0C79D62B7EC016B4D880E8E; PSTM=1564829515; uc_login_unique=6ce0a03b3a8f6030c714294b311d59c7; uc_recom_mark=cmVjb21tYXJrXzI3MTg3NDgz; delPer=0; H_PS_PSSID=1458_21082_29523_29721_29568_29220_22158; PSINO=7; BDORZ=B490B5EBF6F3CD402E515D22BCDA1598; __cas__st__=NLI; __cas__id__=0; Hm_lvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569066651,1569125907,1569127914,1569244953; BDUSS=FiYmFDZEVzNjQybDB1bTg3UjFneG1PSHBqOEE1NU1IaThwdTk1Rk1FOVNWTEJkRVFBQUFBJCQAAAAAAAAAAAEAAADvYfVLX01BTmVhcnRoAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFLHiF1Sx4hdY2; SITEMAPSESSID=mgpkhb9246hukg397jjbq0pi74; lastIdentity=PassUserIdentity; Hm_lpvt_6f6d5bc386878a651cb8c9e1b4a3379a=1569245036"
 
-        proxies = self.get_proxies()
-        #self.test_proxies(proxies)
-        requests.adapters.DEFAULT_RETRIES = 5
-
+        proxies = self.get_proxies(False)
+        # self.test_proxies(proxies)
         try:
             response = requests.post(
-                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies, verify=False, timeout=30)
+                url=self.submit_url, data=data, headers=self.push_header, proxies=proxies, verify=False, timeout=(3, 7))
 
             if response.status_code == 200:
                 response_data = response.json()
                 if response_data['status'] is 0:
-                    msg = "提交成功"+response.text  # {"over":0,"status":0}
-                    update_status(self.mydb, 1, url_id)
+                    # {"over":0,"status":0}
+                    msg = "["+str(url_id)+"]提交成功"+response.text
+                    update_status(self.db_pool[thread_id], 1, url_id)
                 elif response_data['status'] is 4:  # {"status":4}
-                    msg = 'ip或cookie已到提交的限制'+response.text
-                    update_status(self.mydb, 0, url_id, msg)
+                    msg = "["+str(url_id) + "]ip或cookie已到提交的限制"+response.text
+                    update_status(self.db_pool[thread_id], 0, url_id, msg)
                 else:
-                    msg = '返回状态成功,提交失败 '+response.text
-                    update_status(self.mydb, 0, url_id, msg)
+                    msg = "["+str(url_id) + "]返回状态成功,提交失败 "+response.text
+                    update_status(self.db_pool[thread_id], 0, url_id, msg)
             else:
-                msg = 'HTTP CODE：'+response.text
-                update_status(self.mydb, 0, url_id, response.status_code)
+                msg = "["+str(url_id) + "]HTTP CODE："+response.text
+                update_status(self.db_pool[thread_id],
+                              0, url_id, response.status_code)
                 self.base_sleep_time = random.randint(1, 10)
             response.close()
         except Exception as e:
-            msg = str(e)
-            update_status(self.mydb, 0, url_id, '异常')
+            msg = "["+str(url_id)+"]"+str(e)
+            update_status(self.db_pool[thread_id], 0, url_id, '异常')
             self.base_sleep_time = random.randint(1, 10)
 
-        #time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
-        time.sleep(5)
+        # time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
+        time.sleep(0.01)
         return msg
 
     def __del__(self):
-        pass
+        for db in self.db_pool:
+            db.close()

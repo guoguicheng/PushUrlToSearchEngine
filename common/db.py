@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 from config.database import mysql
 import MySQLdb
+import MySQLdb.cursors
 import sys
 sys.path.append('../')
 
@@ -31,5 +32,5 @@ class Mysql:
 
         return data
 
-    def __del__(self):
-        self.db.close()
+    def close(self, db):
+        db.close()
