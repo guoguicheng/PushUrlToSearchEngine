@@ -52,14 +52,13 @@ class push:
             "X-Requested-With": "XMLHttpRequest",
             "Connection": "close"
         }
-        self.init()
+        print("开始连接数据库")
+        self.mydb = Mysql()
+        self.mydb.open()
 
     def init(self):
         print("开始加载cookie")
         self.cookies = self.get_cookies()
-        print("开始连接数据库")
-        self.mydb = Mysql()
-        self.mydb.open()
         print("开始初始化代理")
         self.get_proxies()
 
@@ -72,12 +71,20 @@ class push:
         total = len(urls)
         finished = 0
 
+        check_sql = """SELECT count(*) FROM urls WHERE url = %s """
         insert_sql = """INSERT INTO urls(url,created_time) VALUES(%s,%s)"""
+
         for url in urls:
-            if not url.split():
+            url = url.split()
+            if not url:
+                continue
+            (row,) = self.mydb.execute(check_sql, (url), True)
+            total = row[0]
+            if total > 0:
+                print("URL 已存在，跳过:%s " % (url))
                 continue
             current_time = int(time.time())
-            param = (url.split(), current_time)
+            param = (url, current_time)
             self.mydb.execute(insert_sql, param)
             finished += 1
             print("\r[SAVING]total:%d,finished:%d" % (total, finished), end="")
@@ -96,7 +103,7 @@ class push:
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
-        api = "http://http.tiqu.alicdns.com/getip3?num=10&type=1&pro=&city=0&yys=0&port=1&pack=65775&ts=0&ys=0&cs=0&lb=1&sb=0&pb=4&mr=1&regions="
+        api = "http://http.tiqu.alicdns.com/getip3?num=10&type=2&pro=&city=0&yys=0&port=11&pack=65775&ts=0&ys=0&cs=0&lb=1&sb=0&pb=45&mr=1&regions="
         response = requests.get(url=api, headers=headers).json()
         for item in response['data']:
             proxies = {
@@ -152,6 +159,7 @@ class push:
 
     def urlsubmit(self):
         """使用代理方式提交url"""
+        self.init()
         print("开始提交url")
         total_sql = """SELECT count(*) as num FROM urls WHERE status=0 AND deleted_time IS NULL"""
         (row,) = self.mydb.execute(total_sql, (), True)
