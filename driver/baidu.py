@@ -107,7 +107,7 @@ class push:
         code = response['code']
         if code is not 0:
             print(response['msg'])
-            quit()
+            reutrn {}
         for item in response['data']:
             proxies = {
                 'http': 'http://%s:%d' % (item['ip'], item['port']),
@@ -254,7 +254,7 @@ class push:
             msg = "["+str(url_id)+"]"+str(e)
             self.base_sleep_time = random.randint(1, 10)
 
-        log_success_fail_count(self.db_pool[thread_id], status, url_id, msg)
+        log_success_fail_count(self.db_pool[thread_id], status, url_id, '异常')
         # time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
         time.sleep(0.01)
         return msg

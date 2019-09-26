@@ -1,5 +1,5 @@
 mysql = {
-    "host": "192.168.2.25",
+    "host": "127.0.0.1",
     "user": "root",
     "passwd": "root",
     "db": "push_urls",
