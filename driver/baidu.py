@@ -1,6 +1,6 @@
 # coding:utf-8
 from common.db import Mysql
-from common.functions import log_success, log_fail_items, update_status
+from common.functions import log_success, log_fail_items, log_success_fail_count
 from urllib.parse import urlparse
 from config import baidu as baidu_config
 import requests
@@ -79,8 +79,7 @@ class push:
             if not url:
                 continue
             (row,) = self.mydb.execute(check_sql, (url), True)
-            total = row[0]
-            if total > 0:
+            if row[0] > 0:
                 print("URL 已存在，跳过:%s " % (url))
                 continue
             current_time = int(time.time())
@@ -105,6 +104,10 @@ class push:
         }
         api = "http://http.tiqu.alicdns.com/getip3?num=10&type=2&pro=&city=0&yys=0&port=11&pack=65775&ts=0&ys=0&cs=0&lb=1&sb=0&pb=45&mr=1&regions="
         response = requests.get(url=api, headers=headers).json()
+        code = response['code']
+        if code is not 0:
+            print(response['msg'])
+            quit()
         for item in response['data']:
             proxies = {
                 'http': 'http://%s:%d' % (item['ip'], item['port']),
@@ -220,6 +223,7 @@ class push:
     def post_url(self, url, url_id):
         """发起提交请求"""
         msg = ''
+        status = 0
         data = {'url': url}
         thread_id = threading.currentThread().ident
         self.push_header["Cookie"] = random.choice(self.cookies)
@@ -237,24 +241,20 @@ class push:
                 if response_data['status'] is 0:
                     # {"over":0,"status":0}
                     msg = "["+str(url_id)+"]提交成功"+response.text
-                    update_status(self.db_pool[thread_id], 1, url_id)
+                    status = 1
                 elif response_data['status'] is 4:  # {"status":4}
                     msg = "["+str(url_id) + "]ip或cookie已到提交的限制"+response.text
-                    update_status(self.db_pool[thread_id], 0, url_id, msg)
                 else:
                     msg = "["+str(url_id) + "]返回状态成功,提交失败 "+response.text
-                    update_status(self.db_pool[thread_id], 0, url_id, msg)
             else:
                 msg = "["+str(url_id) + "]HTTP CODE："+response.text
-                update_status(self.db_pool[thread_id],
-                              0, url_id, response.status_code)
                 self.base_sleep_time = random.randint(1, 10)
             response.close()
         except Exception as e:
             msg = "["+str(url_id)+"]"+str(e)
-            update_status(self.db_pool[thread_id], 0, url_id, '异常')
             self.base_sleep_time = random.randint(1, 10)
 
+        log_success_fail_count(self.db_pool[thread_id], status, url_id, msg)
         # time.sleep(random.randint(self.base_sleep_time, self.base_sleep_time+5))
         time.sleep(0.01)
         return msg

@@ -1,6 +1,6 @@
 -- --------------------------------------------------------
--- 主机:                           127.0.0.1
--- 服务器版本:                        8.0.17 - MySQL Community Server - GPL
+-- 主机:                           192.168.2.25
+-- 服务器版本:                        5.6.43 - MySQL Community Server (GPL)
 -- 服务器OS:                        Win64
 -- HeidiSQL 版本:                  10.2.0.5599
 -- --------------------------------------------------------
@@ -13,23 +13,28 @@
 
 
 -- Dumping database structure for push_urls
-CREATE DATABASE IF NOT EXISTS `push_urls` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
+CREATE DATABASE IF NOT EXISTS `push_urls` /*!40100 DEFAULT CHARACTER SET utf8 */;
 USE `push_urls`;
 
 -- Dumping structure for table push_urls.urls
 CREATE TABLE IF NOT EXISTS `urls` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `url` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `url` varchar(255) DEFAULT NULL,
   `status` tinyint(3) unsigned DEFAULT '0' COMMENT '0 未提交 1-提交成功 2-提交失败',
-  `info` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `info` varchar(50) DEFAULT NULL,
+  `success` int(10) unsigned DEFAULT '0' COMMENT '提交成功次数',
+  `failed` int(10) unsigned DEFAULT '0' COMMENT '失败次数',
   `created_time` int(11) DEFAULT NULL,
   `updated_time` int(11) DEFAULT NULL,
   `deleted_time` int(11) DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_status_deleted_time` (`status`,`deleted_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Data exporting was unselected.
+-- Dumping data for table push_urls.urls: ~0 rows (大约)
+DELETE FROM `urls`;
+/*!40000 ALTER TABLE `urls` DISABLE KEYS */;
+/*!40000 ALTER TABLE `urls` ENABLE KEYS */;
 
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;
 /*!40014 SET FOREIGN_KEY_CHECKS=IF(@OLD_FOREIGN_KEY_CHECKS IS NULL, 1, @OLD_FOREIGN_KEY_CHECKS) */;
