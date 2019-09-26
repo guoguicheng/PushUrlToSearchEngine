@@ -96,7 +96,7 @@ class push:
         headers = {
             'User-Agent': random.choice(self.user_agents)
         }
-        api = "http://http.tiqu.alicdns.com/getip3?num=10&type=2&pro=620000&city=621000&yys=0&port=12&pack=65613&ts=0&ys=0&cs=0&lb=1&sb=0&pb=4&mr=1&regions="
+        api = "http://http.tiqu.alicdns.com/getip3?num=10&type=1&pro=&city=0&yys=0&port=1&pack=65775&ts=0&ys=0&cs=0&lb=1&sb=0&pb=4&mr=1&regions="
         response = requests.get(url=api, headers=headers).json()
         for item in response['data']:
             proxies = {
