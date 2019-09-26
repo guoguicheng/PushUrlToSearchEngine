@@ -105,9 +105,11 @@ class push:
         api = "http://http.tiqu.alicdns.com/getip3?num=10&type=2&pro=&city=0&yys=0&port=11&pack=65775&ts=0&ys=0&cs=0&lb=1&sb=0&pb=45&mr=1&regions="
         response = requests.get(url=api, headers=headers).json()
         code = response['code']
+        
         if code is not 0:
             print(response['msg'])
-            reutrn {}
+            return {}
+
         for item in response['data']:
             proxies = {
                 'http': 'http://%s:%d' % (item['ip'], item['port']),
